@@ -160,7 +160,7 @@
 
 (defun get-flats (reader start-marker end-marker)
   (let ((flat-lumps (get-lumps reader :start-marker start-marker
-			              :end-marker   end-marker :include-markers t))
+			              :end-marker   end-marker :include-markers nil))
 	(flats '()))
     (dolist (lump flat-lumps)
       (if (eql (wad-types::size lump) 4096)
@@ -187,11 +187,21 @@
     (setf (image flat) (get-flat-image flat))
     flat))
 
+; ----- ASSET-DATA -----
+
+(defun get-images (reader)
+  (let ((image-lumps (get-lumps reader :start-marker "HELP1"
+				       :end-marker "S_START" :include-markers nil))
+	(images '()))
+    (dolist (lump image-lumps)
+      (setf images (cons (get-patch reader (wad-types::name lump)) images)))
+    (nreverse images)))
 
 ; ----- ASSET-DATA -----
 
 (defclass asset-data ()
-  ((sprites  :accessor sprites)
+  ((wad-reader :accessor wad-reader)
+   (sprites  :accessor sprites)
    (textures :accessor textures)
    (flats    :accessor flats)))
 
@@ -199,8 +209,13 @@
   (let ((data (make-instance 'asset-data))
 	(tex1 (get-textures reader "TEXTURE1"))
 	(tex2 (get-textures reader "TEXTURE2")))
-    (with-slots (sprites textures flats) data
+    (with-slots (wad-reader sprites textures flats) data
+      (setf wad-reader reader)
       (setf sprites (get-sprites reader))
       (setf textures (append tex1 tex2))
       (setf flats (get-flats reader "F_START" "F_END")))
     data))
+
+(defmethod color-palette (asset-data index)
+  (with-slots (wad-reader) asset-data
+    (wad-reader:get-color-palette wad-reader index)))

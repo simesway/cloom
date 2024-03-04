@@ -89,8 +89,8 @@
   (update-sidedefs map-data)
   (update-segs     map-data))
 
-(defmethod map-data-init (map-name)
-  (let* ((reader (wad-reader-init "../data/DOOM1.WAD"))
+(defmethod map-data-init (filepath map-name)
+  (let* ((reader (wad-reader-init filepath))
 	 (map-id (get-lump-index reader map-name))
 	 (map    (get-map-data   reader map-id)))
     (update-data map)

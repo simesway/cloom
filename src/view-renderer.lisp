@@ -11,7 +11,8 @@
   ((window  :accessor window)
    (winptr  :accessor winptr)
    (width   :accessor width)
-   (height  :accessor height)))
+   (height  :accessor height)
+   (asset-data :accessor asset-data)))
 
 
 (defmethod window-dimensions (view-renderer)
@@ -50,25 +51,27 @@
   (dotimes (i MAX_COLORS)
     (charms/ll:init-pair i font-color-index i)))
     
-(defun load-color-palette (palette-index font-color-index)
-  (let ((palette (wad-reader:get-color-palette palette-index)))
-    (create-color-palette palette font-color-index)))
+(defun load-color-palette (asset-data palette-index font-color-index)
+  (with-slots (wad-reader) asset-data
+  (let ((palette (wad-reader::get-color-palette wad-reader palette-index)))
+    (create-color-palette palette font-color-index))))
 
-(defun color-init ()
+(defun color-init (asset-data)
   (when (eql charms/ll:true (charms/ll:has-colors))
     (charms/ll:start-color)
-    (load-color-palette 0 0)))
+    (load-color-palette asset-data 0 0)))
 
-(defun view-renderer-init ()
+(defun view-renderer-init (asset-data-obj)
   (let ((renderer (make-instance 'view-renderer)))
-    (with-slots (window winptr) renderer
+    (with-slots (window winptr asset-data) renderer
       (setf window (charms:initialize))
       (setf winptr (charms::window-pointer window))
+      (setf asset-data asset-data-obj)
       (charms:enable-non-blocking-mode window))
     (charms/ll:curs-set charms/ll:false)
     (charms:disable-echoing)
     (charms:enable-raw-input)
-    (color-init)
+    (color-init asset-data-obj)
     (update-window-dimensions renderer)
     renderer))
 
@@ -130,34 +133,63 @@
 			     (yd (+ y yi top-delta)))
 			 (draw-color-char view-renderer x yd color-id)))))))))
 
-(defun draw-image (view-renderer image &key (x 0) (y 0) (centered nil))
+(defun draw-image (view-renderer image &key (x 0) (y 0) centered x-centered y-centered)
   (let* ((dimensions (array-dimensions image))
 	 (img-w (nth 0 dimensions))
 	 (img-h (nth 1 dimensions)))
     (if centered
-	(with-slots (width height) view-renderer
-	  (setf x (truncate (/ (- width  img-w) 2)))
-	  (setf y (truncate (/ (- height img-h) 2)))))
+	(progn (setf x-centered t)
+	       (setf y-centered t)))
+    (with-slots (width height) view-renderer
+      (if x-centered
+	  (setf x (+ x (truncate (/ (- width  img-w) 2)))))
+      (if y-centered
+	  (setf y (+ y (truncate (/ (- height img-h) 2))))))
     (dotimes (xi img-w)
       (dotimes (yi img-h)
 	(let ((color (aref image xi yi)))
 	  (if color
 	      (draw-color-char view-renderer (+ x xi) (+ y yi) color)))))))
 
-(defun draw-image2 (view-renderer image &key (x 0) (y 0) (centered nil))
+(defun draw-image2 (view-renderer image &key (x 0) (y 0) centered x-centered y-centered (pixel-mode nil))
   (let* ((dimensions (array-dimensions image))
 	 (img-w (nth 0 dimensions))
-	 (img-h (nth 1 dimensions)))
+	 (img-h (nth 1 dimensions))
+	 (new-w img-w)
+	 (new-h img-h)
+	 (iterations 1)
+	 (color-id 1))
+    (case pixel-mode
+      (:half-pixel
+       (progn (setf new-h (/ img-h 2))
+	      (if (eql (mod y 2) 1)
+		  (setf color-id 0))
+	      (setf y (floor (/ y 2)))))
+      (:square-pixel
+       (progn (setf new-w (* img-w 2))
+	      (setf x (* x 2))
+	      (setf iterations 2))))
     (if centered
-	(with-slots (width height) view-renderer
-	  (setf x (truncate (/ (- width  (* img-w 2)) 2)))
-	  (setf y (truncate (/ (- height img-h) 2)))))
+	(progn (setf x-centered t)
+	       (setf y-centered t)))
+    (with-slots (width height) view-renderer
+      (if x-centered
+	  (setf x (+ x (truncate (/ (- width  new-w) 2)))))
+      (if y-centered
+	  (setf y (+ y (truncate (/ (- height new-h) 2))))))
     (loop for xi from 0 below img-w do
       (dotimes (yi img-h)
 	(let ((color (aref image xi yi)))
 	  (if color
-	      (dotimes (i 2)
-		(draw-color-char view-renderer (+ x i (* 2 xi)) (+ y yi) color))))))))
+	      (case pixel-mode
+		(:half-pixel
+		 (if (eql (mod yi 2) color-id)
+		     (draw-color-char view-renderer (+ x xi) (+ y (truncate (/ yi 2))) color)))
+		(:square-pixel
+		 (dotimes (i 2)
+		   (draw-color-char view-renderer (+ x i (* 2 xi)) (+ y yi) color)))
+		(nil
+		 (draw-color-char view-renderer (+ x xi) (+ y yi))))))))))
 
 (defmethod draw-sprite-centered (view-renderer patch)
   (with-slots (asset-data::width asset-data::height) patch

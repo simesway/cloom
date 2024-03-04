@@ -12,7 +12,6 @@
 (defclass wad-reader ()
   ((filepath
     :initarg  :filepath
-    :initform "../data/DOOM.WAD"
     :accessor filepath)
    (file           :accessor file)
    (identification :accessor identification)
@@ -140,17 +139,12 @@
 
 ; ----- ASSET-DATA -----
 
-(defun get-color-palette (index)
-  (let* ((reader     (wad-reader-init "../data/DOOM1.WAD"))
-	 (file       (slot-value reader 'file))
-	 (lump-index (get-lump-index reader "PLAYPAL"))
-	 (lump       (get-lump-by-index reader lump-index))
-	 (position   (+ (wad-types::filepos lump) (* index (* 256 3)))))
+(defmethod get-color-palette (wad-reader index)
+  (let* ((file     (slot-value wad-reader 'file))
+	 (lump     (get-lump-by-name wad-reader "PLAYPAL"))
+	 (position (+ (wad-types::filepos lump) (* index (* 256 3)))))
     (file-position file position)
-    (let (palette)
-      (setf palette (read-value 'binary-element-list file :element-type 'color :length 256))
-      (wad-reader-close reader)
-      palette)))
+    (read-value 'binary-element-list file :element-type 'color :length 256)))
 
 
 (defmethod get-patch-column (wad-reader &optional (offset nil))
@@ -158,7 +152,8 @@
     (if offset
 	(file-position file offset))
     (let ((column (read-value 'patch-column file)))
-      (with-slots (wad-types::top-delta wad-types::num-pixel wad-types::data) column
+      (with-slots (wad-types::top-delta wad-types::num-pixel wad-types::data
+		   wad-types::pad-pre wad-types::pad-post) column
 	(when (not (eql wad-types::top-delta #xFF))
 	  (setf wad-types::num-pixel (read-value 'uint8 file))
 	  (setf wad-types::pad-pre   (read-value 'uint8 file))
