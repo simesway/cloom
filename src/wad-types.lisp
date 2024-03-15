@@ -52,10 +52,10 @@
 (define-binary-type ascii-8 in () (read-value 'ascii-string in :length 8))
 
 (define-binary-element-class bbox
-  ((yu (int16))
-   (yl (int16))
-   (xl (int16))
-   (xu (int16))))
+  ((top    (int16))
+   (bottom (int16))
+   (left   (int16))
+   (right  (int16))))
 
 (define-binary-element-class color
   ((r (uint8))
@@ -147,7 +147,7 @@
 (defmacro linedef-flag (flag return-value)
   (case return-value
     (:id   `(expt 2 (position ,flag *linedef-flags* :test #'string=)))
-    (:name `(nth (truncate (log ,flag 2)) *linedef-flags*))))
+    (:name `(nth (truncate (if (eql 0 ,flag) 0 (log ,flag 2))) *linedef-flags*))))
 
 ; ---- ASSET-DATA ----
 
