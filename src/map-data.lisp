@@ -1,6 +1,6 @@
 (defpackage :map-data
   (:use :common-lisp :wad-reader)
-  (:export :map-data :map-data-init))
+  (:export :map-data :map-data-init :get-thing-of-type))
 
 (in-package :map-data)
 
@@ -96,3 +96,31 @@
     (update-data map)
     (wad-reader-close reader)
     map))
+
+(defun get-thing-of-type (map-data type-id)
+  (with-slots (things) map-data
+    (dolist (thing things)
+      (when (eql (wad-types::t-type thing) type-id)
+	(return-from get-thing-of-type thing)))))
+
+(defun get-dimensions (map-data)
+  (with-slots (vertexes) map-data
+    (let* ((x-sorted (sort vertexes #'< :key 'wad-types::x))
+	   (last     (1- (length vertexes)))
+	   (x-min    (wad-types::x (nth 0    x-sorted)))
+	   (x-max    (wad-types::x (nth last x-sorted)))
+	   (y-sorted (sort vertexes #'< :key 'wad-types::y))
+	   (y-min    (wad-types::y (nth 0    y-sorted)))
+	   (y-max    (wad-types::y (nth last y-sorted))))
+      (list (list x-min x-max) (list y-min y-max)))))
+
+(defun get-dims (map-data)
+  (with-slots (nodes) map-data
+    (let* ((rboxes (mapcar (lambda (node) (slot-value node 'wad-types::rbox) nodes)))
+	   (lboxes (mapcar (lambda (node) (slot-value node 'wad-types::lbox) nodes)))
+	   (bboxes (append rboxes lboxes))
+	   (x-min  (car (sort bboxes #'< :key 'wad-types::left)))
+	   (x-max  (car (sort bboxes #'> :key 'wad-types::right)))
+	   (y-min  (car (sort bboxes #'< :key 'wad-types::bottom)))
+	   (y-max  (car (sort bboxes #'> :key 'wad-types::top))))
+      (list (list x-min x-max) (list y-min y-max)))))
