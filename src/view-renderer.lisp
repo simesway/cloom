@@ -1,9 +1,17 @@
 (defpackage :view-renderer
   (:use :common-lisp :wad-reader)
   (:export :view-renderer :view-renderer-init :update :view-renderer-close
-	   :draw-vline :draw-sprite :draw-sprite-centered :set-background :window-dimensions))
+	   :draw-vline :draw-sprite :draw-sprite-centered :set-background :window-dimensions
+	   :SCREEN-W :SCREEN-H :SCREEN-H-W :SCREEN-H-H :SCREEN-DIST))
 
 (in-package :view-renderer)
+
+
+(defparameter SCREEN-W 320)
+(defparameter SCREEN-H 300)
+(defparameter SCREEN-H-W (floor (/ SCREEN-W 2)))
+(defparameter SCREEN-H-H (floor (/ SCREEN-H 2)))
+(defparameter SCREEN-DIST (/ SCREEN-H-W (tan (math:convert-angle :degrees player:H-FOV))))
 
 (defconstant MAX_COLORS 256)
 
@@ -20,9 +28,17 @@
     (charms/ll:getmaxyx (winptr view-renderer) height width)
     (values width height)))
 
+(defun update-globals (width height)
+  (setf SCREEN-W width)
+  (setf SCREEN-H height)
+  (setf SCREEN-H-W (floor (/ SCREEN-W 2)))
+  (setf SCREEN-H-H (floor (/ SCREEN-H 2)))
+  (setf SCREEN-DIST (/ SCREEN-H-W (tan (math:convert-angle :degrees player:H-FOV)))))
+
 (defmethod update-window-dimensions (view-renderer)
   (with-slots (winptr width height) view-renderer
-    (charms/ll:getmaxyx winptr height width)))
+    (charms/ll:getmaxyx winptr height width)
+    (update-globals width height)))
 
 (defun scale (val min1 max1 min2 max2)
   (let ((scale1 (- max1 min1))
@@ -100,7 +116,7 @@
 
 (defmethod draw-vline (view-renderer x y1 y2 texture lightlevel)
   (with-slots (window winptr) view-renderer
-    (let ((color-id (mod (texture-to-random-color texture 50) MAX_COLORS))
+    (let ((color-id (mod (texture-to-random-color texture 5) MAX_COLORS))
 	  (char     (short-grayscale1 (mod lightlevel 256))))
       (with-color (winptr color-id)
 	(loop for y from y1 to y2

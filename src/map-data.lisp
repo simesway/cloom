@@ -1,5 +1,5 @@
 (defpackage :map-data
-  (:use :common-lisp :wad-reader)
+  (:use :common-lisp :wad-reader :utilities)
   (:export :map-data :map-data-init :get-thing-of-type))
 
 (in-package :map-data)
@@ -116,8 +116,8 @@
 
 (defun get-dims (map-data)
   (with-slots (nodes) map-data
-    (let* ((rboxes (mapcar (lambda (node) (slot-value node 'wad-types::rbox) nodes)))
-	   (lboxes (mapcar (lambda (node) (slot-value node 'wad-types::lbox) nodes)))
+    (let* ((rboxes (mapcar (lambda (node) (slot-value node 'wad-types::rbox)) nodes))
+	   (lboxes (mapcar (lambda (node) (slot-value node 'wad-types::lbox)) nodes))
 	   (bboxes (append rboxes lboxes))
 	   (x-min  (car (sort bboxes #'< :key 'wad-types::left)))
 	   (x-max  (car (sort bboxes #'> :key 'wad-types::right)))

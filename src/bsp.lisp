@@ -1,5 +1,5 @@
 (defpackage :bsp
-  (:use :common-lisp :map-data :utilities :player :math)
+  (:use :common-lisp :map-data :utilities :player :math :seg-handler :view-renderer)
   (:export :bsp :make-bsp))
 
 (in-package :bsp)
@@ -15,7 +15,8 @@
 (defvar *sides* '())
 
 (defclass bsp ()
-  ((nodes :accessor nodes)
+  ((seg-handler :accessor seg-handler)
+   (nodes :accessor nodes)
    (ssectors :accessor ssectors)
    (segs     :accessor segs)
    (player   :accessor player)
@@ -23,9 +24,19 @@
    (is-traverse  :accessor is-traverse
 		 :initform t)))
 
-(defun make-bsp (map-data player-obj)
+(defclass pov-seg ()
+  ((seg   :accessor seg   :initarg :seg)
+   (x1    :accessor x1    :initarg :x1)
+   (x2    :accessor x2    :initarg :x2)
+   (angle :accessor angle :initarg :angle)))
+
+(defun pov-seg (seg x1 x2 angle)
+  (make-instance 'pov-seg :seg seg :x1 x1 :x2 x2 :angle angle))
+
+(defun make-bsp (map-data player-obj view-renderer)
   (let* ((bsp (make-instance 'bsp)))
-    (with-slots (nodes ssectors segs player root-node-id) bsp
+    (with-slots (seg-handler nodes ssectors segs player root-node-id) bsp
+      (setf seg-handler (seg-handler::seg-handler-init map-data player-obj view-renderer bsp))
       (setf nodes (map-data::nodes map-data))
       (setf *nodes* nodes)
       (setf ssectors (map-data::ssectors map-data))
@@ -34,12 +45,15 @@
       (setf player player-obj)
       (setq *player* player)
       (setf root-node-id (1- (length nodes))))
-    (setf *segs-in-fov* '())
-    (setf *visited-nodes* '())
-    (setf *sides* '())
-    (setf *ssector-segs* '())
+    (reset-vars)
     (setf *map-dims* (map-data::get-dimensions map-data))
     bsp))
+
+(defun reset-vars ()
+  (setf *segs-in-fov* '())
+  (setf *visited-nodes* '())
+  (setf *sides* '())
+  (setf *ssector-segs* '()))
 
 (defun is-subsector (node-id)
   (logbitp 15 node-id))
@@ -102,13 +116,52 @@
 	 (if (bbox-in-fov lbox (player bsp))
 	     (render-bsp-node bsp lchild)))))))
 
+(defun angle-to-x (angle)
+  (let ((a (convert-angle :degrees angle)))
+    (if (> angle 0)
+	(floor (- SCREEN-DIST (*    (tan a) SCREEN-H-W)))
+	(floor (+ SCREEN-DIST (* -1 (tan a) SCREEN-H-W))))))
+
+
+(defun add-seg-to-fov (bsp seg)
+  (with-package-slots (v1 v2) seg
+    (let* ((vec1 (get-coordinates v1))
+	   (vec2 (get-coordinates v2))
+	   (p  (get-coordinates (player bsp)))
+	   (a1 (angle-to-point  p vec1))
+	   (a2 (angle-to-point  p vec2))
+	   (span (norm-angle (- a1 a2))))
+      
+      (if (>= span 180.0) (return-from add-seg-to-fov nil))
+      
+      (let* ((a-p (player::angle (player bsp)))
+	     (a1-p (- a1 a-p))
+	     (a2-p (- a2 a-p))
+	     (span1 (norm-angle (+ a1-p player:H-FOV)))
+	     (span2 (norm-angle (- player:H-FOV a2-p))))
+	
+	(if (> span1 player:FOV)
+	    (if (>= span1 (+ span player:FOV))
+		(return-from add-seg-to-fov nil)
+		(setf a1-p player:H-FOV)))
+	(if (> span2 player:FOV)
+	    (if (>= span2 (+ span player:FOV))
+		(return-from add-seg-to-fov nil)
+		(setf a1-p (- player:H-FOV))))
+	(let ((x1 (angle-to-x a1-p))
+	      (x2 (angle-to-x a2-p)))
+	  (pov-seg seg x1 x2 a1))))))
+
 (defun render-subsector (bsp subsector-id)
   (let* ((ssector (nth subsector-id (ssectors bsp)))
 	 (segs    (segs bsp)))
     (with-package-slots (first-seg seg-count) ssector
       (dotimes (i seg-count)
-	(let ((seg (nth (+ first-seg i) segs)))
-	  (push seg *ssector-segs*))))))
+	(let* ((seg     (nth (+ first-seg i) segs))
+	       (pov-seg (add-seg-to-fov bsp seg)))
+	  (if pov-seg
+	      (progn (push seg *ssector-segs*)
+		     (classify-segment (seg-handler bsp) pov-seg))))))))
 
 (defun render-bsp-node (bsp node-id)
   (when (is-traverse bsp)
@@ -120,3 +173,28 @@
 	  (if (is-on-left-side player node)
 	      (render-child bsp node :left)
 	      (render-child bsp node :right))))))
+
+(defun render-bsp (bsp)
+  (with-slots (root-node-id is-traverse) bsp
+    (setf is-traverse t)
+    (render-bsp-node bsp root-node-id)))
+
+(defun get-subsector-height (bsp)
+  (with-slots (root-node-id player nodes ssectors segs) bsp
+    (let ((subsector-id root-node-id))
+      (loop until (is-subsector subsector-id)
+	    do (let ((node (nth subsector-id nodes)))
+		 (with-package-slots (lchild rchild) node
+		   (if (is-on-left-side player node)
+		       (setf subsector-id lchild)
+		       (setf subsector-id rchild))))
+	    finally (return (let* ((ssector (nth (logand subsector-id #x7FFF) ssectors))
+				   (seg     (nth (wad-types::first-seg ssector) segs))
+				   (sector  (wad-types::fsector seg)))
+			      (wad-types::floorheight sector)))))))
+
+(defmethod seg-handler:get-player-height ((arg bsp))
+  (+ player:HEIGHT (get-subsector-height arg)))
+
+(defmethod seg-handler:stop-traversing-bsp ((arg bsp))
+  (setf (is-traverse arg) nil))

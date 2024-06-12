@@ -1,6 +1,6 @@
 (defpackage :utilities
   (:use :common-lisp)
-  (:export :with-package-slots :access-map-data))
+  (:export :with-package-slots :access-map-data :get-coordinates))
 
 (in-package :utilities)
 
@@ -26,3 +26,7 @@
   `(let ,(loop for slot in slots
 	      collect `(,slot (slot-value* ,obj ',slot)))
      ,@body))
+
+(defun get-coordinates (obj)
+  (with-package-slots (x y) obj
+    (list x y)))

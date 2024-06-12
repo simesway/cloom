@@ -136,7 +136,7 @@
 
  (defmethod gamekit:draw ((this map-renderer))
    (draw-segs bsp::*all-segs* *black* 2)
-   (draw-segs bsp::*ssector-segs* *blue* 3)
    (draw-player)
-   ;(draw-nodes bsp::*visited-nodes*)
-   (draw-sides bsp::*sides*))
+   (draw-nodes bsp::*visited-nodes*)
+   (draw-sides bsp::*sides*)
+   (draw-segs bsp::*ssector-segs* *blue* 3))
