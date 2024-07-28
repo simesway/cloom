@@ -15,9 +15,11 @@
    (is-traverse  :accessor is-traverse
 		 :initform t)))
 
+;;; Function that returns the Subsector height the player is located in
 (defun get-subsector-height (bsp)
   (with-slots (root-node-id player nodes ssectors segs) bsp
     (let ((subsector-id root-node-id))
+      ; Traverse the binary space tree until reaching a subsector
       (loop until (is-subsector subsector-id)
 	    do (let ((node (nth subsector-id nodes)))
 		 (with-package-slots (lchild rchild) node

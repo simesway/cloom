@@ -24,9 +24,15 @@
   `(setf (slot-value ,to-object ',slot-name)
 	 (slot-value ,from-object ',slot-name)))
 
+;;; Methods for opening and closing the WAD file
+
 (defmethod open-wadfile ((reader wad-reader))
   (setf (file reader) (open (filepath reader) :element-type '(unsigned-byte 8))))
 
+(defmethod wad-reader-close (wad-reader)
+  (close (file wad-reader)))
+
+;;; Method to read the WAD header and store it in the reader
 (defmethod read-wadinfo ((reader wad-reader))
   (with-slots (file) reader
     (file-position file 0)
@@ -35,6 +41,7 @@
       (setf (numlumps       reader) (wad-types::numlumps       wadinfo))
       (setf (infotableofs   reader) (wad-types::infotableofs   wadinfo)))))
 
+;;; Method to read all lumps and store them as a directory in the reader
 (defmethod read-directory ((reader wad-reader))
   (with-slots (file numlumps infotableofs directory) reader
     (file-position file infotableofs)
@@ -49,9 +56,7 @@
     (read-directory reader)
     reader))
 
-(defmethod wad-reader-close (wad-reader)
-  (close (file wad-reader)))
-
+;;; Method to read the patch header for a given patch name
 (defmethod read-patch-header (wad-reader patch-name)
   (with-slots (file) wad-reader
     (let* ((lump    (get-lump-by-name wad-reader patch-name))
@@ -67,6 +72,7 @@
 						    :length wad-types::width)))
       header)))
 
+;;; Method to read the texture header for a given texture-lump-name
 (defmethod read-texture-header (wad-reader texture-lump-name)
   (with-slots (file) wad-reader
     (let* ((lump (get-lump-by-name wad-reader texture-lump-name))
@@ -83,8 +89,9 @@
       header)))
   
 
-; ---- LUMP HANDLING ----
+;;;; ---- LUMP HANDLING ----
 
+;;; Method to get the index of a lump in the directory
 (defmethod get-lump-index ((reader wad-reader) lump-name)
   (with-slots (directory numlumps) reader
     (loop for lump in directory
@@ -92,15 +99,19 @@
 	  do (if (string-equal (wad-types::name lump) lump-name)
 		 (return i)))))
 
+;;; Methods to get a lump from the directory by its index or name
+
 (defmethod get-lump-by-index (wad-reader lump-index)
   (nth lump-index (wad-directory wad-reader)))
 
 (defmethod get-lump-by-name (wad-reader lump-name)
   (get-lump-by-index wad-reader (get-lump-index wad-reader lump-name)))
 
+;;; Function to get the position-index of a map-data lump
 (defun get-map-lump-index (map-index lump-name)
   (+ map-index (position lump-name *map-lumps* :test #'string=) 1))
   
+;;; Function to get lumps between specified markers
 (defun get-lumps (wad-reader &key start-marker end-marker (include-markers nil))
   (let ((start-id (if start-marker (get-lump-index wad-reader start-marker) 0))
 	(end-id   (if end-marker   (get-lump-index wad-reader end-marker)   0))
@@ -110,6 +121,7 @@
 	(setf start-id (1+ start-id)))
     (subseq directory start-id end-id)))
 
+;;; Method to get the data, referenced by a lump, based on the index-position in the directory
 (defmethod get-lump-data (wad-reader lump-index &key (header-length 0) (element-type 'uint8) (sizeof-element 1))
   (let* ((lump  (get-lump-by-index wad-reader lump-index))
 	 (count (/ (- (wad-types::size lump) header-length) sizeof-element)))
@@ -118,8 +130,9 @@
 		:element-type element-type :length count)))
 
 
-; ----- MAP-DATA -----
+;;;; ----- MAP-DATA -----
 
+;;; Macro to define methods for retrieving the map-data given a map index 
 (defmacro define-get-map-lump (name lump-name element-type sizeof-element)
   `(defmethod ,name (wad-reader map-index)
      (let ((index (get-map-lump-index map-index ,lump-name)))
@@ -127,6 +140,7 @@
 				       :element-type ,element-type
 				       :sizeof-element ,sizeof-element))))
 
+;;; Methods to read the map-data lumps
 (define-get-map-lump get-things   "THINGS"   'thing     10)
 (define-get-map-lump get-linedefs "LINEDEFS" 'linedef   14)  
 (define-get-map-lump get-sidedefs "SIDEDEFS" 'sidedef   30)  
@@ -137,15 +151,15 @@
 (define-get-map-lump get-sectors  "SECTORS"  'sector    26)
      
 
-; ----- ASSET-DATA -----
+;;;; ----- ASSET-DATA -----
 
+;;; Method to read and store the colorpalette of the given index
 (defmethod get-color-palette (wad-reader index)
   (let* ((file     (slot-value wad-reader 'file))
 	 (lump     (get-lump-by-name wad-reader "PLAYPAL"))
 	 (position (+ (wad-types::filepos lump) (* index (* 256 3)))))
     (file-position file position)
     (read-value 'binary-element-list file :element-type 'color :length 256)))
-
 
 (defmethod get-patch-column (wad-reader &optional (offset nil))
   (with-slots (file) wad-reader
@@ -163,6 +177,7 @@
 	  (setf wad-types::pad-post (read-value 'uint8 file))))
       column)))
 	
+;;; Function that returns the names of all Patches
 (defun get-pnames (wad-reader)
  (let* ((lump   (get-lump-by-name wad-reader "PNAMES"))
 	(offset (wad-types::filepos lump)))
@@ -171,7 +186,7 @@
       (let ((num (read-value 'uint32 file)))
 	(read-value 'binary-element-list file :element-type 'ascii-8 :length num)))))
 
-
+;;; Function that returns the Texture-Map and and resolves the Patch Maps
 (defun get-texture-map (wad-reader &optional (offset nil))
   (with-slots (file) wad-reader
     (if offset
@@ -183,6 +198,7 @@
 						      :length wad-types::p-count)))
       tex-map)))
 
+;;; Function that reads and returns a Flat given a flat-lump
 (defun get-flat-data (wad-reader flat-lump)
   (with-slots (file) wad-reader
     (with-slots (wad-types::size wad-types::filepos) flat-lump

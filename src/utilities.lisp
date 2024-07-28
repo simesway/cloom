@@ -5,6 +5,8 @@
 (in-package :utilities)
 
 
+;;; Macros and Functions for reading slots without having to reference the package of origin
+
 (defun pkg-sym (symbol package)
   (intern (symbol-name symbol) package))
 
@@ -27,6 +29,7 @@
 	      collect `(,slot (slot-value* ,obj ',slot)))
      ,@body))
 
+;;; Function for accessing the x & y coordinates of any object (that has these)
 (defun get-coordinates (obj)
   (with-package-slots (x y) obj
     (list x y)))

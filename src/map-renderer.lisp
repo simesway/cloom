@@ -4,6 +4,7 @@
 
 (in-package :map-renderer)
 
+;;;; 2D Map Renderer for Debugging the BSP
 
 (defvar *canvas-width*  800)
 (defvar *canvas-height* 600)

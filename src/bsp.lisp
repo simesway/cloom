@@ -5,6 +5,8 @@
 (in-package :bsp)
 
 
+;; Vars storing elements rendered by the map-renderer (used for debugging)
+
 (defvar *player* '())
 (defvar *map-dims* '())
 (defvar *nodes* '())
@@ -24,6 +26,7 @@
    (is-traverse  :accessor is-traverse
 		 :initform t)))
 
+;;; Seg object holding additional information on screen-x1/-x2 and angle 
 (defclass pov-seg ()
   ((seg   :accessor seg   :initarg :seg)
    (x1    :accessor x1    :initarg :x1)
@@ -33,6 +36,7 @@
 (defun pov-seg (seg x1 x2 angle)
   (make-instance 'pov-seg :seg seg :x1 x1 :x2 x2 :angle angle))
 
+;;; Function to create a Binary Space Partitioning Object given map-data, player and view-renderer
 (defun make-bsp (map-data player-obj view-renderer)
   (let* ((bsp (make-instance 'bsp)))
     (with-slots (seg-handler nodes ssectors segs player root-node-id) bsp
@@ -49,15 +53,17 @@
     (setf *map-dims* (map-data::get-dimensions map-data))
     bsp))
 
-(defun reset-vars ()
+(defun reset-vars () ; for debugging with map-renderer
   (setf *segs-in-fov* '())
   (setf *visited-nodes* '())
   (setf *sides* '())
   (setf *ssector-segs* '()))
 
+;;; Function that checks if a node is a leaf node (subsector)
 (defun is-subsector (node-id)
   (logbitp 15 node-id))
 
+;;; Function that checks if the player is on the left of the node's partition line
 (defun is-on-left-side (player node)
   (with-slots (player::x player::y) player 
     (with-package-slots (x y dx dy) node
@@ -65,6 +71,7 @@
 	     (dy1 (- player::y y)))
 	(<= (- (* dx1 dy) (* dy1 dx)) 0)))))
 
+;;; Function that checks if the bounding box of a (child) node is in the field of view
 (defun bbox-in-fov (bbox player)
   (with-slots (player::x player::y player::angle) player
     (with-package-slots (top bottom left right) bbox
@@ -101,7 +108,7 @@
 		(return-from bbox-in-fov t))))
 	(return-from bbox-in-fov nil)))))
 
-
+;;; Function that goes down the bsp to one or both sides (childs) of a partition line
 (defun render-child (bsp node side)
   (with-package-slots (lbox lchild rbox rchild) node
     (case side
@@ -116,13 +123,14 @@
 	 (if (bbox-in-fov lbox (player bsp))
 	     (render-bsp-node bsp lchild)))))))
 
+;;; Function that maps an angle to the position on screen
 (defun angle-to-x (angle)
   (let ((a (convert-angle :degrees angle)))
     (if (> angle 0)
 	(floor (- SCREEN-DIST (*    (tan a) SCREEN-H-W)))
 	(floor (+ SCREEN-DIST (* -1 (tan a) SCREEN-H-W))))))
 
-
+;;; Function that calculates the location on screen of a segment and returns the pov-seg
 (defun add-seg-to-fov (bsp seg)
   (with-package-slots (v1 v2) seg
     (let* ((vec1 (get-coordinates v1))
@@ -131,8 +139,9 @@
 	   (a1 (angle-to-point  p vec1))
 	   (a2 (angle-to-point  p vec2))
 	   (span (norm-angle (- a1 a2))))
-      
-      (if (>= span 180.0) (return-from add-seg-to-fov nil))
+
+      ; Backface culling
+      (if (>= span 180.0) (return-from add-seg-to-fov nil)) 
       
       (let* ((a-p (player::angle (player bsp)))
 	     (a1-p (- a1 a-p))
@@ -152,6 +161,8 @@
 	      (x2 (angle-to-x a2-p)))
 	  (pov-seg seg x1 x2 a1))))))
 
+;;; Function that checks all segs making up a subsector
+;;; and passes the ones in the player's fov to the seg-handler
 (defun render-subsector (bsp subsector-id)
   (let* ((ssector (nth subsector-id (ssectors bsp)))
 	 (segs    (segs bsp)))
@@ -163,6 +174,7 @@
 	      (progn (push seg *ssector-segs*)
 		     (classify-segment (seg-handler bsp) pov-seg))))))))
 
+;;; Function to start traversing and rendering the binary space tree given a node index
 (defun render-bsp-node (bsp node-id)
   (when (is-traverse bsp)
     (if (is-subsector node-id)
@@ -174,6 +186,7 @@
 	      (render-child bsp node :left)
 	      (render-child bsp node :right))))))
 
+;;; Function that renders entire binary space tree
 (defun render-bsp (bsp)
   (with-slots (root-node-id is-traverse) bsp
     (setf is-traverse t)

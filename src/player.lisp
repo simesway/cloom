@@ -7,10 +7,14 @@
 
 (in-package :player)
 
+;;;; Simple Functions and Class Definition for Player Loading and Handling
+
+
+;;; Constants used for rendering the Player's view 
 
 (defconstant FOV 90)
 (defconstant H-FOV (/ FOV 2))
-(defconstant HEIGHT 41)
+(defconstant HEIGHT 41) ; Height of Player
 
 (defconstant PLAYER-SPEED 3)
 (defconstant PLAYER-ROT-SPEED 2)
@@ -21,7 +25,7 @@
    (angle :accessor angle)))
 
 (defun player-init (map-data)
-  (let ((thing (access-map-data map-data things 0))
+  (let ((thing (access-map-data map-data things 0)) ; First Thing is Player 0
 	(player (make-instance 'player)))
     (with-slots (x y angle) player
       (setf x (wad-types::x thing))

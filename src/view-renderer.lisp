@@ -7,6 +7,8 @@
 (in-package :view-renderer)
 
 
+;;; Default DOOM Screen Dimensions
+
 (defparameter SCREEN-W 320)
 (defparameter SCREEN-H 300)
 (defparameter SCREEN-H-W (floor (/ SCREEN-W 2)))
@@ -35,6 +37,7 @@
   (setf SCREEN-H-H (floor (/ SCREEN-H 2)))
   (setf SCREEN-DIST (/ SCREEN-H-W (tan (math:convert-angle :degrees player:H-FOV)))))
 
+;;; Method to fit the rendering dimensions to the terminal dimensions
 (defmethod update-window-dimensions (view-renderer)
   (with-slots (winptr width height) view-renderer
     (charms/ll:getmaxyx winptr height width)
@@ -52,8 +55,10 @@
 	   (round new-val)
 	   new-val))))
 
+;;; Function that scales from regular color range to ncurses specific color range
 (define-scale-function scale-rgb-to-ncurses 0 255 0 1000 t)
 
+;;; Function that initializes ncurses colors given a DOOM color palette
 (defun create-colors (palette)
   (dotimes (i MAX_COLORS)
     (with-slots (wad-types::r wad-types::g wad-types::b) (nth i palette)
@@ -62,21 +67,24 @@
 	    (b (scale-rgb-to-ncurses wad-types::b)))
 	(charms/ll:init-color i r g b)))))
 
+;;; Function that initializes color-pairs given a DOOM palette and a color index for the font
 (defun create-color-palette (palette font-color-index)
   (create-colors palette)
   (dotimes (i MAX_COLORS)
     (charms/ll:init-pair i font-color-index i)))
-    
+
 (defun load-color-palette (asset-data palette-index font-color-index)
   (with-slots (wad-reader) asset-data
   (let ((palette (wad-reader::get-color-palette wad-reader palette-index)))
     (create-color-palette palette font-color-index))))
 
+;;; Checks if terminal is capable of colors and initializes a color palette from the asset data
 (defun color-init (asset-data)
   (when (eql charms/ll:true (charms/ll:has-colors))
     (charms/ll:start-color)
     (load-color-palette asset-data 0 0)))
 
+;;; Function that initializes the view-renderer 
 (defun view-renderer-init (asset-data-obj)
   (let ((renderer (make-instance 'view-renderer)))
     (with-slots (window winptr asset-data) renderer
@@ -85,23 +93,26 @@
       (setf asset-data asset-data-obj)
       (charms:enable-non-blocking-mode window))
     (charms/ll:curs-set charms/ll:false)
-    (charms:disable-echoing)
-    (charms:enable-raw-input)
+    (charms:disable-echoing)  ; keyboard input is not printed
+    (charms:enable-raw-input) ; input is returned as code
     (color-init asset-data-obj)
     (update-window-dimensions renderer)
     renderer))
 
+;;; Function that safely shuts down ncurses
 (defun view-renderer-close ()
   (charms/ll:getch)
   (charms:finalize))
 
 
+;;; Macro for setting a current color pair
 (defmacro with-color ((winptr color-index) &body body)
   `(let ((index (mod ,color-index MAX_COLORS)))
      (charms/ll:wattron  ,winptr (charms/ll:color-pair ,color-index))
      ,@body
      (charms/ll:wattroff ,winptr (charms/ll:color-pair ,color-index))))
 
+;;; Macro for defining ascii character based grayscales
 (defmacro defun-grayscale (name grayscale)
   `(defun ,name (lightlevel)
      (let ((index (truncate (* (/ lightlevel 256.0) ,(length grayscale)))))
@@ -111,9 +122,11 @@
 (defun-grayscale short-grayscale2 "$EFLlv!;,. ")
 (defun-grayscale long-grayscale "$@B%8&WM#oahkbdpqwmZO0QLCJUYXzcvunxrjft/\|()1{}[]?-_+~<>i!lI;:,^`'. ")
 
+;;; Function that replaces a texture by a color
 (defun texture-to-random-color (texture-name seed)
   (abs (+ seed (sxhash texture-name))))
 
+;;; Main rendering function 
 (defmethod draw-vline (view-renderer x y1 y2 texture lightlevel)
   (with-slots (window winptr) view-renderer
     (let ((color-id (mod (texture-to-random-color texture 5) MAX_COLORS))
@@ -122,16 +135,19 @@
 	(loop for y from y1 to y2
 	      do (charms/ll:mvwaddch winptr y x (char-code char)))))))
 
+;;; Method that draws a single char given a position and color pair index
 (defmethod draw-color-char (view-renderer x y &optional (color-id 0) (char #\Space))
   (with-slots (winptr) view-renderer
     (with-color (winptr color-id)
       (charms/ll:mvwaddch winptr y x (char-code char)))))
     
+;;; Method that fills entire background
 (defmethod set-background (view-renderer color-id)
   (with-slots (winptr) view-renderer
     (with-color (winptr color-id)
       (charms/ll:wbkgd winptr color-id))))
 
+;;; Method that draws a Sprite from the patch columns
 (defmethod draw-sprite (view-renderer patch &optional (x 0) (y 0))
   (with-slots (asset-data::columns asset-data::width asset-data::height) patch
     (let ((columns asset-data::columns)
@@ -149,6 +165,7 @@
 			     (yd (+ y yi top-delta)))
 			 (draw-color-char view-renderer x yd color-id)))))))))
 
+;;; Function that draws any image (Texture, Sprite, Flat, Image)
 (defun draw-image (view-renderer image &key (x 0) (y 0) centered x-centered y-centered)
   (let* ((dimensions (array-dimensions image))
 	 (img-w (nth 0 dimensions))
@@ -167,6 +184,7 @@
 	  (if color
 	      (draw-color-char view-renderer (+ x xi) (+ y yi) color)))))))
 
+;;; Function that draws any image but with changeable pixel aspect ratio
 (defun draw-image2 (view-renderer image &key (x 0) (y 0) centered x-centered y-centered (pixel-mode nil))
   (let* ((dimensions (array-dimensions image))
 	 (img-w (nth 0 dimensions))
@@ -176,15 +194,18 @@
 	 (iterations 1)
 	 (color-id 1))
     (case pixel-mode
-      (:half-pixel
+      ; Two vertical neighbor pixels are reduced to one character
+      (:half-pixel 
        (progn (setf new-h (/ img-h 2))
 	      (if (eql (mod y 2) 1)
 		  (setf color-id 0))
 	      (setf y (floor (/ y 2)))))
+      ; Two horizontal neighbor pixels share the same color
       (:square-pixel
        (progn (setf new-w (* img-w 2))
 	      (setf x (* x 2))
 	      (setf iterations 2))))
+    ;; Center image on screen
     (if centered
 	(progn (setf x-centered t)
 	       (setf y-centered t)))
@@ -207,6 +228,7 @@
 		(nil
 		 (draw-color-char view-renderer (+ x xi) (+ y yi))))))))))
 
+
 (defmethod draw-sprite-centered (view-renderer patch)
   (with-slots (asset-data::width asset-data::height) patch
     (with-slots (width height) view-renderer
@@ -214,11 +236,13 @@
 	    (start-y (truncate (/ (- height asset-data::height) 2))))
 	(draw-sprite view-renderer patch start-x start-y)))))
 
+;;; Function that writes a string at a given position
 (defmethod write-str (view-renderer x y string &optional (color-id 3))
   (with-slots (winptr window) view-renderer
     (with-color (winptr color-id)
       (charms:write-string-at-point window string x y))))
 
+;;; Function that updates the terminal screen, applying all changes
 (defmethod update (view-renderer)
   (charms:refresh-window (window view-renderer))
   (update-window-dimensions view-renderer))

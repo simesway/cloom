@@ -12,16 +12,29 @@
 (in-package :wad-types)
 
 
-(defvar *map-lumps* (list "THINGS" "LINEDEFS" "SIDEDEFS" "VERTEXES" "SEGS"
-			  "SSECTORS" "NODES" "SECTORS" "REJECT" "BLOCKMAP"))
+;;; Order of map data lumps
+(defconstant *map-lumps* (list "THINGS" "LINEDEFS" "SIDEDEFS" "VERTEXES" "SEGS"
+			       "SSECTORS" "NODES" "SECTORS" "REJECT" "BLOCKMAP"))
 
-(defvar *linedef-flags* (list "BLOCKING" "BLOCK_MONSTERS" "TWO_SIDED" "DONT_PEG_TOP"
-			      "DONT_PEG_BOTTOM" "SECRET" "SOUND_BLOCK" "DONT_DRAW" "MAPPED"))
+;;; Constant for mapping linedef flags to ids
+(defconstant *linedef-flags* (list "BLOCKING" "BLOCK_MONSTERS" "TWO_SIDED" "DONT_PEG_TOP"
+				   "DONT_PEG_BOTTOM" "SECRET" "SOUND_BLOCK" "DONT_DRAW" "MAPPED"))
 
-; ---- BINARY-TYPES ----
+;;; Macro for converting linedef flags to string, id
+(defmacro linedef-flag (flag return-value)
+  (case return-value
+    (:id   `(expt 2 (position ,flag *linedef-flags* :test #'string=)))
+    (:name `(nth (truncate (if (eql 0 ,flag) 0 (log ,flag 2))) *linedef-flags*))))
 
+
+
+;;;; ---- BINARY-TYPES ----
+;;;; Binary type definitions for correctly reading DOOM's WAD-files
+
+;;; Placeholder for empty binary-class slots 
 (define-binary-type empty in ())
 
+;;; Base type for reading integers
 (define-binary-type generic-int in (bytes unsigned)
   (let ((value 0))
     (dotimes (i bytes)
@@ -35,12 +48,14 @@
 (define-binary-type uint16 in () (read-value 'generic-int in :bytes 2 :unsigned t))
 (define-binary-type uint32 in () (read-value 'generic-int in :bytes 4 :unsigned t))
 
+;;; Type for reading lists of specific element-type
 (define-binary-type binary-element-list in (length (element-type 'uint8))
   (let ((list '()))
     (dotimes (i length)
       (setf list (cons (read-value element-type in) list))) 
     (setf list (nreverse list))))
 
+;;; Type for reading ascii strings
 (define-binary-type ascii-string in (length)
   (with-output-to-string (s)
     (dotimes (i length)
@@ -50,6 +65,8 @@
 
 (define-binary-type ascii-4 in () (read-value 'ascii-string in :length 4))
 (define-binary-type ascii-8 in () (read-value 'ascii-string in :length 8))
+
+;;; Binary classes for reading bounding boxes and rgb-colors
 
 (define-binary-element-class bbox
   ((top    (int16))
@@ -62,19 +79,25 @@
    (g (uint8))
    (b (uint8))))
 
-; ---- WAD-READER ----
 
+
+;;;; ---- WAD-READER ----
+
+;;; Class for reading the header of a WAD file
 (define-binary-element-class wadinfo
   ((identification (ascii-4))
    (numlumps        (uint32))
    (infotableofs    (uint32))))
 
+;;; Class for reading a lump (directory entry for a data block)
 (define-binary-element-class filelump
   ((filepos (uint32))
    (size    (uint32))
    (name   (ascii-8))))
 
-; ---- MAP-DATA ----
+
+
+;;;; ---- MAP-DATA ----
 
 (define-binary-element-class thing
   ((x      (int16))
@@ -144,12 +167,9 @@
    (tag           (int16))))
 
 
-(defmacro linedef-flag (flag return-value)
-  (case return-value
-    (:id   `(expt 2 (position ,flag *linedef-flags* :test #'string=)))
-    (:name `(nth (truncate (if (eql 0 ,flag) 0 (log ,flag 2))) *linedef-flags*))))
 
-; ---- ASSET-DATA ----
+;;;; ---- ASSET-DATA ----
+;;;; Class definitions for reading Patches and Textures
 
 (define-binary-element-class patch-header
   ((width    (uint16))
