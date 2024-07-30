@@ -4,6 +4,20 @@
 (load "~/quicklisp/setup.lisp")
 (asdf:load-system "cloom")
 
+
+;;;; ASSET-VIEWER: small command line tool to view the textures, sprites, flats and images of a DOOM WAD file
+;;;; usage: asset-viewer [filepath] [--textures|--sprites|--flats|--images|--all]
+
+;;; keyboard shortcuts:
+;; q/Esc   -> quit from asset-viewer
+;; h       -> next asset
+;; l       -> previous asset
+;; w/a/s/d -> move asset up/left/down/right
+;; x       -> set pixel mode to square pixel
+;; y       -> set pixel mode to half pixel
+;; m       -> switch between pixel mode [square-pixel|half-pixel]
+
+
 (defparameter *wad-filepath* nil)
 (defparameter *data-sequence* nil)
 (defvar *mode* nil)
@@ -78,8 +92,8 @@
 		  (#\a (setf x (+ x 2)))
 		  (#\s (setf y (- y 1)))
 		  (#\d (setf x (- x 2)))
-		  (#\y (setf pixel-mode :square-pixel))
-		  (#\x (setf pixel-mode :half-pixel))
+		  (#\y (setf pixel-mode :half-pixel))
+		  (#\x (setf pixel-mode :square-pixel))
 		  (#\m (if (eql pixel-mode :square-pixel)
 			   (setf pixel-mode :half-pixel)
 			   (setf pixel-mode :square-pixel)))

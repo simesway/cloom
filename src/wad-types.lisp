@@ -83,13 +83,13 @@
 
 ;;;; ---- WAD-READER ----
 
-;;; Class for reading the header of a WAD file
+;;; Class for the header of a WAD file
 (define-binary-element-class wadinfo
   ((identification (ascii-4))
    (numlumps        (uint32))
    (infotableofs    (uint32))))
 
-;;; Class for reading a lump (directory entry for a data block)
+;;; Class for a lump (directory entry referencing a data block)
 (define-binary-element-class filelump
   ((filepos (uint32))
    (size    (uint32))
@@ -98,6 +98,7 @@
 
 
 ;;;; ---- MAP-DATA ----
+;;;; Objects that define a Map
 
 (define-binary-element-class thing
   ((x      (int16))
@@ -169,7 +170,7 @@
 
 
 ;;;; ---- ASSET-DATA ----
-;;;; Class definitions for reading Patches and Textures
+;;;; Objects that define Patches and Textures
 
 (define-binary-element-class patch-header
   ((width    (uint16))

@@ -4,6 +4,12 @@
 (load "~/quicklisp/setup.lisp")
 (asdf:load-system 'cloom)
 
+
+;;;; MAP-PREVIEW: program to view a DOOM map from the terminal
+;;;; usage: map-preview [filepath] [map]
+;; map is e.g. E1M1
+
+
 (defparameter *wad-filepath* "../../data/DOOM1.WAD")
 (defparameter *map-name* "E1M1")
 
@@ -36,7 +42,7 @@
 	 (path    (first cmdline))
 	 (map     (second cmdline)))
     (if (< length 1)
-	(format t "asset-viewer [filepath] [map]~%"))
+	(format t "map-preview [filepath] [map]~%"))
     (if path
 	(setf *wad-filepath* path))
     (if map
